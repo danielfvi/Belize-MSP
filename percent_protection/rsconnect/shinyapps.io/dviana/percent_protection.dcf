@@ -1,0 +1,13 @@
+name: percent_protection
+title: percent_protection
+username:
+account: dviana
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 9177490
+bundleId: 7258611
+url: https://dviana.shinyapps.io/percent_protection/
+when: 1684949655.67066
+lastSyncTime: 1684949655.67067
+asMultiple: FALSE
+asStatic: FALSE

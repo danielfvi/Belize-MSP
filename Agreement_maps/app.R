@@ -15,6 +15,8 @@ library(tidyverse)
 ##Root results
 root = read_sf('data', layer = '06_prot_corl_30000ha_all') %>% st_transform(4326)
 coastline = read_sf('data', layer = 'mar_coastline') %>% st_transform(4326)
+replenishment = read_sf('data', layer = 'bz_fish_replenishment_areas') %>% st_transform(4326)
+
 
 ##Biomass and catch estimates
 bio <- read_csv("data/bio_catch_estimates.csv") %>% 
@@ -62,12 +64,12 @@ ui <- fluidPage(
    sidebarLayout(
       sidebarPanel(
          sliderInput("bio",
-                     "Biomass:",
+                     "Reef fish biomass:",
                      min = 0,
                      max = 10,
                      value = 1),
          sliderInput("cp",
-                     "Coastal Protection:",
+                     "Coastal protection:",
                      min = 0,
                      max = 10,
                      value = 1),
@@ -81,11 +83,11 @@ ui <- fluidPage(
                      min = 0,
                      max = 10,
                      value = 1),
-         sliderInput("lob",
-                     "Lobster:",
-                     min = 0,
-                     max = 10,
-                     value = 1)
+         # sliderInput("lob",
+         #             "Lobster:",
+         #             min = 0,
+         #             max = 10,
+         #             value = 1)
       ),
       
       # Show a plot of the generated distribution
@@ -101,20 +103,27 @@ server <- function(input, output) {
    output$distPlot <- renderPlot({
       # generate bins based on input$bins from ui.R
       root2 = root %>% 
-        mutate(agreement = input$cp*cv_rs + input$rec*rec_rs + input$lob*lob_rs + input$bio*targ_rs + input$con*connect_rs)
+        mutate(agreement = 
+                 input$cp*cv_rs + 
+                 input$rec*rec_rs + 
+                 #input$lob*lob_rs + 
+                 input$bio*targ_rs + 
+                 input$con*connect_rs)
       
-      # draw the histogram with the specified number of bins
+      # plot map
       ggplot() +
         geom_sf(data = coastline) +
         geom_sf(data = root2, mapping = aes(fill = agreement), alpha = 0.5) +
+        geom_sf(data = replenishment) +
         scale_fill_gradient(name="Priority areas",
                              #breaks = c(50, 950),
                              #labels = c("Low", "High"),
                              low="white", high="darkred") +
         coord_sf(y=c(15.8, 18.5), x = c(-89, -87.3)) +
         #labs(fill = "Biomass (non-MPA)") +
-        theme_bw() + base_theme 
-   })
+        theme_bw() + base_theme +
+        theme(plot.margin = unit(c(0,0,0,0), "cm"))
+   }, height = 700, width = 600)
 }
 
 # Run the application 

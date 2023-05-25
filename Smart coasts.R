@@ -4,6 +4,7 @@ library(raster)
 library(leaflet)
 library(sf)
 library(ggpubr)
+library(fmsb)
 
 # Clear workspace
 rm(list = ls())
@@ -14,6 +15,7 @@ coastline = read_sf('data/smart coasts/base', layer = 'mar_coastline') %>% st_tr
 replenishment = read_sf('data/smart coasts/base', layer = 'bz_fish_replenishment_areas') %>% st_transform(4326)
 reef1 = read_sf('data/smart coasts/base', layer = 'Coral_baselinefootprint_degraded') %>% st_transform(4326)
 reef2 = read_sf('data/smart coasts/base', layer = 'Coral_baselinefootprint_healthy') %>% st_transform(4326)
+reef3 = read_sf('data/reef shapefiles', layer = 'reef') %>% st_transform(4326)
 
 MPAs_dta = MPAs %>% 
   st_drop_geometry()
@@ -35,11 +37,31 @@ root = root %>%
   left_join(connectivity) %>% 
   mutate(tot_score = if_else(is.na(tot_score), 0, tot_score))
 
-##Agreement2
+##Agreement areas considering connectivity
+#agreement1 = cv_rs + rec_rs + lob_rs + targ_rs
+#agreement2 = cv_rs + rec_rs + lob_rs + targ_rs + connect_rs
+#agreement3 = cv_rs + rec_rs - lob_rs + targ_rs + connect_rs
+
 agreement2 <- read_csv("data/agreement2.csv")
 
 root = root %>%
   left_join(agreement2)
+
+##Dta
+root_dta = root %>% 
+  st_drop_geometry()
+
+##Calculate lobster fisheries benefits
+root_dta2 = root_dta %>% 
+  mutate(total = sum(root_dta$lob),
+         fish = total-lob)
+
+lob_benefit = root_dta2 %>% 
+  mutate(fis_rs = (fish-min(root_dta2$fish))/(max(root_dta2$fish) - min(root_dta2$fish))) %>% 
+  dplyr::select(SDU_ID, total, fish, fis_rs)
+
+root = root %>% 
+  left_join(lob_benefit)
 
 ##Dta
 root_dta = root %>% 
@@ -72,8 +94,8 @@ ggplot() +
   geom_sf(data = MPAs) +
   geom_sf(data = coastline) +
   geom_sf(data = replenishment) +
-  geom_sf(data = reef2, alpha = 0.5) +
-  geom_sf(data = reef1, alpha = 0.5) +
+  #geom_sf(data = reef2, alpha = 0.5) +
+  geom_sf(data = reef3, alpha = 0.5) +
   geom_sf(data = root, mapping = aes(fill = prt_crl), alpha = 0.5) +
   scale_fill_gradient2(name="Priority areas",
                        breaks = c(50, 950),
@@ -179,10 +201,10 @@ ggplot() +
   #labs(fill = "Biomass (non-MPA)") +
   theme_bw() + base_theme
 
-###Tradeoff
+##################Tradeoff
 ##Tradeoff
 ggplot(data = root) +
-  geom_point(aes(x = lob_rs, y = targ_rs, color = log(rec)), size = 5) +
+  geom_point(aes(x = fis_rs, y = targ_rs, color = log(rec)), size = 5) +
   scale_color_gradient2(name="Tourism",
                      breaks = c(-5, 5),
                      labels = c("Low", "High"),
@@ -193,11 +215,11 @@ ggplot(data = root) +
         axis.title = element_text(size = 23))
 
 root = root %>% 
-  mutate(priority = if_else(targ_rs>0.5&lob_rs<0.3, "High", "Low"))
+  mutate(priority = if_else(targ_rs>0.5&fis_rs>0.7, "High", "Low"))
 
 
 ggplot(data = root) +
-  geom_point(aes(x = lob_rs, y = targ_rs, color = priority), size = 5) +
+  geom_point(aes(x = fis_rs, y = targ_rs, color = priority), size = 5) +
   # scale_color_gradient2(name="Tourism",
   #                       breaks = c(-5, 5),
   #                       labels = c("Low", "High"),
@@ -221,6 +243,263 @@ ggplot() +
   coord_sf(y=c(15.8, 18.5), x = c(-89, -87.3)) +
   #labs(fill = "Biomass (non-MPA)") +
   theme_bw() + base_theme
+
+
+#################Proposals
+
+# pol2 = st_polygon(
+#   list(
+#     cbind(
+#       c(-87.7, -87.7, -87.8, -87.8, -87.7),
+#       c(16.78, 16.98, 16.98, 16.78, 16.78))
+#   )
+# )
+# #coord_sf(y=c(16.7, 16.95), x = c(-87.92, -87.65)) +
+# pal <- colorQuantile("Reds", NULL, n = 5)
+# 
+# leaflet() %>%
+#   addTiles() %>%
+#   addPolygons(data = root, fillColor= ~pal(prt_crl), fillOpacity = 0.4, 
+#               weight = 2, 
+#               color = "white") %>%
+#   addPolygons(data = replenishment) %>% 
+#   addPolygons(data = pol2, color = "red")
+
+##ID for intersection
+root_dta_ID = root_dta %>% 
+  mutate(row.id = 1:nrow(root)) %>% 
+  dplyr::select(row.id, SDU_ID)
+
+##Total lobster catch
+lob_catch = root_dta$total[1] 
+
+##Stakeholder 1
+sk1 = st_polygon(
+  list(
+    cbind(
+      c(-88.1, -88.1, -88.2, -88.2, -88.1),
+      c(16.3, 16.5, 16.5, 16.3, 16.3))
+  )
+)
+
+
+sk1_inter = as.data.frame(st_intersects(root, sk1))
+
+sk1_dta = root_dta_ID %>% 
+  left_join(sk1_inter) %>% 
+  mutate(col.id = replace_na(col.id, 0)) %>% 
+  rename(is_selected = col.id) %>% 
+  dplyr::select(SDU_ID, is_selected)
+
+sk1_outcomes = root_dta %>% 
+  left_join(sk1_dta) %>% 
+  mutate(score = is_selected*prt_crl,
+         cv_selec = is_selected*cv,
+         lob_selec = is_selected*lob,
+         rec_selec = is_selected*rec,
+         targ_selec = is_selected*targ,
+         connect_selec = is_selected*tot_score) %>%
+  summarise(score = mean(score),
+            cv = sum(cv_selec),
+            lob = lob_catch - sum(lob_selec),
+            rec = sum(rec_selec),
+            targ = sum(targ_selec),
+            connect = mean(connect_selec))
+
+
+
+##Stakeholder 2
+sk2 = st_polygon(
+  list(
+    cbind(
+      c(-88, -88, -88.1, -88.1, -88),
+      c(17.1, 17.3, 17.3, 17.1, 17.1))
+  )
+)
+
+sk2_inter = as.data.frame(st_intersects(root, sk2))
+
+sk2_dta = root_dta_ID %>% 
+  left_join(sk2_inter) %>% 
+  mutate(col.id = replace_na(col.id, 0)) %>% 
+  rename(is_selected = col.id) %>% 
+  dplyr::select(SDU_ID, is_selected)
+
+sk2_outcomes = root_dta %>% 
+  left_join(sk2_dta) %>% 
+  mutate(score = is_selected*prt_crl,
+         cv_selec = is_selected*cv,
+         lob_selec = is_selected*lob,
+         rec_selec = is_selected*rec,
+         targ_selec = is_selected*targ,
+         connect_selec = is_selected*tot_score) %>%
+  summarise(score = mean(score),
+            cv = sum(cv_selec),
+            lob = lob_catch - sum(lob_selec),
+            rec = sum(rec_selec),
+            targ = sum(targ_selec),
+            connect = mean(connect_selec))
+
+
+##Stakeholder 3
+sk3 = st_polygon(
+  list(
+    cbind(
+      c(-87.7, -87.7, -87.8, -87.8, -87.7),
+      c(16.78, 16.98, 16.98, 16.78, 16.78))
+  )
+)
+
+sk3_inter = as.data.frame(st_intersects(root, sk3))
+
+sk3_dta = root_dta_ID %>% 
+  left_join(sk3_inter) %>% 
+  mutate(col.id = replace_na(col.id, 0)) %>% 
+  rename(is_selected = col.id) %>% 
+  dplyr::select(SDU_ID, is_selected)
+
+sk3_outcomes = root_dta %>% 
+  left_join(sk3_dta) %>% 
+  mutate(score = is_selected*prt_crl,
+         cv_selec = is_selected*cv,
+         lob_selec = is_selected*lob,
+         rec_selec = is_selected*rec,
+         targ_selec = is_selected*targ,
+         connect_selec = is_selected*tot_score) %>%
+  summarise(score = mean(score),
+            cv = sum(cv_selec),
+            lob = lob_catch - sum(lob_selec),
+            rec = sum(rec_selec),
+            targ = sum(targ_selec),
+            connect = mean(connect_selec))
+
+
+##Plot comparison accross proposals
+proposals = rbind(sk1_outcomes, sk2_outcomes, sk3_outcomes)
+
+rownames(proposals) <- paste("Propposal" , 1:3 , sep=" ")
+
+plot_dta = rbind(data.frame(score = c(max(proposals$score), min(proposals$score)),
+                            cv = c(max(proposals$cv), min(proposals$cv)),
+                            lob = c(max(proposals$lob), min(proposals$lob)),
+                            rec = c(max(proposals$rec), min(proposals$rec)),
+                            targ = c(max(proposals$targ), min(proposals$targ)),
+                            connect = c(max(proposals$connect), min(proposals$connect))),
+                 proposals) %>% 
+  rename("Smart Coasts\nPriority" = score,
+         "Coastal\nProtection" = cv,
+         "Tourism" = rec,
+         "Reef fish\nbiomass" = targ,
+         "Connectivity" = connect,
+         "Lobster fisheries" = lob) %>% 
+  dplyr::select(-"Smart Coasts\nPriority")
+
+# Color vector
+colors_border=c( rgb(0.2,0.5,0.5,0.9), rgb(0.8,0.2,0.5,0.9) , rgb(0.7,0.5,0.1,0.9) )
+colors_in=c( rgb(0.2,0.5,0.5,0.4), rgb(0.8,0.2,0.5,0.4) , rgb(0.7,0.5,0.1,0.4) )
+
+
+radarchart(plot_dta, axistype=1 , 
+            #custom polygon
+            pcol=colors_border , pfcol=colors_in , plwd=4 , plty=1,
+            #custom the grid
+            cglcol="grey", 
+           cglty=1, 
+           axislabcol="black", caxislabels=c("", "", "", "", ""),
+           cglwd=0.8,
+            #custom labels
+            vlcex=1 
+)
+
+# Add a legend
+legend(x=0.7, y=1.1, legend = rownames(plot_dta[-c(1,2),]), bty = "n", pch=20 , col=colors_in , text.col = "black", cex=1.2, pt.cex=3)
+
+
+######################Trade off analysis of proposals
+proposals2 = rbind(sk1_outcomes, sk2_outcomes, sk3_outcomes) %>% 
+  mutate(lob_rs = lob/sum(root_dta$lob),
+         bio_rs = targ/sum(root_dta$targ),
+         rec_rs = rec/sum(root_dta$rec),
+         proposal = c("Proposal 1", "Proposal 2", "Proposal 3"))
+
+##Biomass vs fisheries
+ggplot(data = proposals2) +
+  geom_point(aes(x = lob_rs, y = bio_rs, color = proposal), size = 5) +
+  labs(x = "Lobster fisheries", y = "Reef fish biomass", color = "") +
+  theme_bw() +
+  theme(axis.text = element_text(size = 15),
+        axis.title = element_text(size = 23),
+        legend.text = element_text(size = 15))
+
+##Biomass vs tourism
+ggplot(data = proposals2) +
+  geom_point(aes(x = rec_rs, y = bio_rs, color = proposal), size = 5) +
+  labs(x = "Tourism", y = "Reef fish biomass", color = "") +
+  theme_bw() +
+  theme(axis.text = element_text(size = 15),
+        axis.title = element_text(size = 23),
+        legend.text = element_text(size = 15))
+
+#################Maps
+#Proposal 1
+sk1_map = st_sfc(sk1, crs = 4326)
+#Map
+ggplot() +
+  #geom_sf(data = MPAs) +
+  geom_sf(data = coastline) +
+  geom_sf(data = replenishment) +
+  #geom_sf(data = reef2, alpha = 0.5) +
+  #geom_sf(data = reef1, alpha = 0.5) +
+  geom_sf(data = root) +
+  geom_sf(data = sk1_map, fill = "red", alpha = 0.5) +
+  coord_sf(y=c(15.8, 18.4), x = c(-89, -87.3)) +
+  labs(title = "Proposal 1") +
+  theme_bw() + base_theme +
+  theme(plot.title = element_text(size = 20))
+
+
+#Proposal 2
+sk2_map = st_sfc(sk2, crs = 4326)
+
+#Map
+ggplot() +
+  #geom_sf(data = MPAs) +
+  geom_sf(data = coastline) +
+  geom_sf(data = replenishment) +
+  #geom_sf(data = reef2, alpha = 0.5) +
+  #geom_sf(data = reef1, alpha = 0.5) +
+  geom_sf(data = root) +
+  geom_sf(data = sk2_map, fill = "red", alpha = 0.5) +
+  coord_sf(y=c(15.8, 18.4), x = c(-89, -87.3)) +
+  labs(title = "Proposal 2") +
+  theme_bw() + base_theme +
+  theme(plot.title = element_text(size = 20))
+
+#Proposal 3
+sk3_map = st_sfc(sk3, crs = 4326)
+
+#Map
+ggplot() +
+  #geom_sf(data = MPAs) +
+  geom_sf(data = coastline) +
+  geom_sf(data = replenishment) +
+  #geom_sf(data = reef2, alpha = 0.5) +
+  #geom_sf(data = reef1, alpha = 0.5) +
+  geom_sf(data = root) +
+  geom_sf(data = sk3_map, fill = "red", alpha = 0.5) +
+  coord_sf(y=c(15.8, 18.4), x = c(-89, -87.3)) +
+  labs(title = "Proposal 3") +
+  theme_bw() + base_theme +
+  theme(plot.title = element_text(size = 20))
+
+# plot_dta = rbind(data.frame(score = c(max(root_dta$prt_crl), min(root_dta$prt_crl)),
+#                             cv = c(sum(root_dta$cv), min(root_dta$cv)),
+#                             #lob = c(lob_catch, min(root_dta$lob)),
+#                             rec = c(sum(root_dta$rec), min(root_dta$rec)),
+#                             targ = c(sum(root_dta$targ), min(root_dta$targ)),
+#                             connect = c(max(root_dta$tot_score), min(root_dta$tot_score))),
+#                  sk1_outcomes)
+
 
 ##################################Examples
 
