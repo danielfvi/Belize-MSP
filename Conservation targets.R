@@ -10,14 +10,12 @@ library(fmsb)
 rm(list = ls())
 
 ##Base data
-#MPAs <- read_sf('data/smart coasts/base', layer = 'mar_mpas_all') %>% filter(Country == "Belize") %>% st_transform(4326)
-MPAs <- read_sf('data/MPA shapefiles', layer = 'all_BLZ_MPAs') %>% st_transform(4326)
-coastline = read_sf('data/smart coasts/base', layer = 'mar_coastline') %>% st_transform(4326)
-#replenishment = read_sf('data/smart coasts/base', layer = 'bz_fish_replenishment_areas') %>% st_transform(4326)
-replenishment = read_sf('data/MPA shapefiles', layer = 'exsiting_HPCZ') %>% st_transform(4326)
-reef1 = read_sf('data/smart coasts/base', layer = 'Coral_baselinefootprint_degraded') %>% st_transform(4326)
-reef2 = read_sf('data/smart coasts/base', layer = 'Coral_baselinefootprint_healthy') %>% st_transform(4326)
-reef3 = read_sf('data/reef shapefiles', layer = 'reef') %>% st_transform(4326)
+MPAs <- read_sf('data/smart coasts/base', layer = 'mar_mpas_all') %>% filter(Country == "Belize") %>% st_transform(4326)
+# coastline = read_sf('data/smart coasts/base', layer = 'mar_coastline') %>% st_transform(4326)
+replenishment = read_sf('data/smart coasts/base', layer = 'bz_fish_replenishment_areas') %>% st_transform(4326)
+# reef1 = read_sf('data/smart coasts/base', layer = 'Coral_baselinefootprint_degraded') %>% st_transform(4326)
+# reef2 = read_sf('data/smart coasts/base', layer = 'Coral_baselinefootprint_healthy') %>% st_transform(4326)
+# reef3 = read_sf('data/reef shapefiles', layer = 'reef') %>% st_transform(4326)
 
 MPAs_dta = MPAs %>% 
   st_drop_geometry()
@@ -69,164 +67,121 @@ root = root %>%
 root_dta = root %>% 
   st_drop_geometry()
 
+##Subset for management units within existing MPAs
+root_MPAs_inter = as.data.frame(st_intersects(root, MPAs))
+
+##ID for intersection
+root_dta_ID = root_dta %>% 
+  mutate(row.id = 1:nrow(root)) %>% 
+  dplyr::select(row.id, SDU_ID)
+
+root_MPAs = root_dta_ID %>% 
+  left_join(root_MPAs_inter) %>% 
+  mutate(col.id = replace_na(col.id, 0),
+         col.id = if_else(col.id>0, 1, col.id)) %>% 
+  rename(is_mpa = col.id) %>% 
+  dplyr::select(SDU_ID, is_mpa)
+
+root2 = root %>% 
+  left_join(root_MPAs) %>% 
+  filter(is_mpa == 1)
+
 # leaflet() %>%
-#   addTiles() %>% 
-#   addPolygons(data = MPAs) %>% 
-#   addPolygons(data = replenishment)
-
-
-##Maps
-# Base theme
-base_theme <- theme(legend.title = element_text(size = 10),
-                    legend.text = element_text(size = 10),
-                    plot.title = element_text(size = 13),
-                    axis.text=element_blank(),
-                    axis.title=element_blank(),
-                    strip.text=element_blank(),
-                    panel.grid.major = element_blank(), 
-                    panel.grid.minor = element_blank(),
-                    panel.background = element_blank(), 
-                    axis.line = element_line(colour = "black"),
-                    # Legend
-                    #legend.position=c(0.11,0.35),
-                    legend.background = element_rect(fill=alpha('blue', 0)))
-
-##Smart Coasts priority areas
-ggplot() +
-  geom_sf(data = MPAs) +
-  geom_sf(data = coastline) +
-  geom_sf(data = replenishment) +
-  #geom_sf(data = reef2, alpha = 0.5) +
-  geom_sf(data = reef3, alpha = 0.5) +
-  geom_sf(data = root, mapping = aes(fill = prt_crl), alpha = 0.5) +
-  scale_fill_gradient2(name="Priority areas",
-                       breaks = c(50, 950),
-                       labels = c("Low", "High"),
-                       low="blue", mid = "white", high="red", midpoint = 500) +
-  coord_sf(y=c(15.8, 18.5), x = c(-89, -87.3)) +
-  #labs(fill = "Biomass (non-MPA)") +
-  theme_bw() + base_theme 
-
-##Priority areas with connectivity
-ggplot() +
-  geom_sf(data = MPAs) +
-  geom_sf(data = coastline) +
-  geom_sf(data = replenishment) +
-  geom_sf(data = reef2, alpha = 0.5) +
-  geom_sf(data = reef1, alpha = 0.5) +
-  geom_sf(data = root, mapping = aes(fill = agreement2), alpha = 0.5) +
-  scale_fill_gradient2(name="Priority areas\n(connectivity)",
-                       breaks = c(50, 950),
-                       labels = c("Low", "High"),
-                       low="blue", mid = "white", high="red", midpoint = 500) +
-  coord_sf(y=c(15.8, 18.5), x = c(-89, -87.3)) +
-  #labs(fill = "Biomass (non-MPA)") +
-  theme_bw() + base_theme 
-
-#Reef biomass
-ggplot() +
-  geom_sf(data = MPAs) +
-  geom_sf(data = coastline) +
-  geom_sf(data = replenishment) +
-  #geom_sf(data = reef2, alpha = 0.5) +
-  #geom_sf(data = reef1, alpha = 0.5) +
-  geom_sf(data = root, mapping = aes(fill = log(targ))) +
-  scale_fill_gradient2(name="Target species\nbiomass",
-                       breaks = c(10, 15),
-                       labels = c("Low", "High"),
-                       low="blue", mid = "white", high="red", midpoint = 13) +
-  coord_sf(y=c(15.8, 18.5), x = c(-89, -87.3)) +
-  #labs(fill = "Biomass (non-MPA)") +
-  theme_bw() + base_theme 
-
-#Predicted catch
-ggplot() +
-  geom_sf(data = MPAs) +
-  geom_sf(data = coastline) +
-  geom_sf(data = replenishment) +
-  #geom_sf(data = reef2, alpha = 0.5) +
-  #geom_sf(data = reef1, alpha = 0.5) +
-  geom_sf(data = root, mapping = aes(fill = log(est_catch))) +
-  scale_fill_gradient2(name="Reef\ncatch",
-                       breaks = c(4, 9),
-                       labels = c("Low", "High"),
-                       low="blue", mid = "white", high="red", midpoint = 7) +
-  coord_sf(y=c(15.8, 18.5), x = c(-89, -87.3)) +
-  #labs(fill = "Biomass (non-MPA)") +
-  theme_bw() + base_theme 
-
-#Lobster catch
-ggplot() +
-  geom_sf(data = MPAs) +
-  geom_sf(data = coastline) +
-  geom_sf(data = replenishment) +
-  #geom_sf(data = reef2, alpha = 0.5) +
-  #geom_sf(data = reef1, alpha = 0.5) +
-  geom_sf(data = root, mapping = aes(fill = log(lob))) +
-  scale_fill_gradient2(name="Lobster\ncatch",
-                       breaks = c(2, 8),
-                       labels = c("Low", "High"),
-                       low="blue", mid = "white", high="red", midpoint = 5) +
-  coord_sf(y=c(15.8, 18.5), x = c(-89, -87.3)) +
-  #labs(fill = "Biomass (non-MPA)") +
-  theme_bw() + base_theme
-
-#Tourism
-ggplot() +
-  geom_sf(data = MPAs) +
-  geom_sf(data = coastline) +
-  geom_sf(data = replenishment) +
-  #geom_sf(data = reef2, alpha = 0.5) +
-  #geom_sf(data = reef1, alpha = 0.5) +
-  geom_sf(data = root, mapping = aes(fill = log(rec))) +
-  scale_fill_gradient2(name="Tourism",
-                       breaks = c(-5, 5),
-                       labels = c("Low", "High"),
-                       low="blue", mid = "white", high="red", midpoint = 0) +
-  coord_sf(y=c(15.8, 18.5), x = c(-89, -87.3)) +
-  #labs(fill = "Biomass (non-MPA)") +
-  theme_bw() + base_theme
-
-#Connectivity
-ggplot() +
-  geom_sf(data = coastline) +
-  #geom_sf(data = reef2, alpha = 0.5) +
-  #geom_sf(data = reef1, alpha = 0.5) +
-  geom_sf(data = root, mapping = aes(fill = tot_score)) +
-  geom_sf(data = replenishment, alpha = 0.4) +
-  #geom_sf(data = MPAs, alpha = 0.4) +
-  scale_fill_gradient2(name="Connectivity",
-                       breaks = c(0.2, 3.5),
-                       labels = c("Low", "High"),
-                       low="blue", mid = "white", high="red", midpoint = 0.8) +
-  coord_sf(y=c(15.8, 18.5), x = c(-89, -87.3)) +
-  #labs(fill = "Biomass (non-MPA)") +
-  theme_bw() + base_theme
+#   addTiles() %>%
+#   addPolygons(data = MPAs) %>%
+#   addPolygons(data = root)
 
 ##################Tradeoff
-##Tradeoff
-ggplot(data = root) +
-  geom_point(aes(x = fis_rs, y = targ_rs, color = log(rec)), size = 5) +
-  scale_color_gradient2(name="Tourism",
-                     breaks = c(-5, 5),
-                     labels = c("Low", "High"),
-                     low="blue", mid = "white", high="red", midpoint = 0) +
-  labs(x = "Lobster fisheries", y = "Reef biomass", color = "Tourism") +
-  theme_bw() +
-  theme(axis.text = element_text(size = 15),
-        axis.title = element_text(size = 23))
+tradeoff_priority = root2 %>% 
+  st_drop_geometry() %>% 
+  mutate(priority_lob_targ1 = if_else(targ_rs>0.4&fis_rs>0.7, 1, 0),
+         priority_lob_targ2 = if_else(targ_rs>0.3&fis_rs>0.7, 1, 0),
+         priority_lob_targ3 = if_else(targ_rs>0.5&fis_rs>0.7, 1, 0)) %>%
+  dplyr::select(SDU_ID, targ_rs, fis_rs, priority_lob_targ1:priority_lob_targ3) %>%
+  reshape2::melt(id.vars = c("SDU_ID", "targ_rs", "fis_rs"))
 
-root = root %>% 
-  mutate(priority = if_else(targ_rs>0.5&fis_rs>0.7, "High", "Low"))
+priority_summary = tradeoff_priority %>% 
+  group_by(variable) %>% 
+  summarise(perc_target = round(100*sum(value)/nrow(root_dta), 1))
 
-
-ggplot(data = root) +
-  geom_point(aes(x = fis_rs, y = targ_rs, color = priority), size = 5) +
+ggplot() +
+  geom_point(data = root2, aes(y = targ_rs, x = fis_rs), size = 5) +
+  geom_point(data = tradeoff_priority %>% filter(value == 1, variable == "priority_lob_targ2"), aes(y = targ_rs, x = fis_rs), size = 5, color = "red") +
+  geom_point(data = tradeoff_priority %>% filter(value == 1, variable == "priority_lob_targ1"), aes(y = targ_rs, x = fis_rs), size = 5, color = "blue") +
+  geom_point(data = tradeoff_priority %>% filter(value == 1, variable == "priority_lob_targ3"), aes(y = targ_rs, x = fis_rs), size = 5, color = "green") +
+  geom_hline(yintercept = 0.3, size = 3, color = "red")+
+  geom_hline(yintercept = 0.4, size = 3, color = "blue")+
+  geom_hline(yintercept = 0.5, size = 3, color = "green")+
+  annotate("text", x = 0.34, y = 0.32, label = "Threshold 1", col = "red", size = 5)+
+  annotate("text", x = 0.34, y = 0.42, label = "Threshold 2", col = "blue", size = 5)+
+  annotate("text", x = 0.34, y = 0.52, label = "Threshold 3", col = "green", size = 5)+
   # scale_color_gradient2(name="Tourism",
   #                       breaks = c(-5, 5),
   #                       labels = c("Low", "High"),
   #                       low="blue", mid = "white", high="red", midpoint = 0) +
-  labs(x = "Lobster fisheries", y = "Reef biomass", color = "Priority") +
+  labs(x = "Lobster fisheries", y = "Reef biomass", color = "Priority", title = "Conservation/Fisheries tradeoff") +
+  theme_bw() +
+  theme(axis.text = element_text(size = 15),
+        axis.title = element_text(size = 23),
+        plot.title = element_text(size = 23))
+
+##Smart Coasts
+root_priority = root2 %>% 
+  st_drop_geometry() %>% 
+  mutate(priority3 = if_else(prt_crl>990, 1, 0),
+         priority2 = if_else(prt_crl>750, 1, 0),
+         priority1 = if_else(prt_crl>500, 1, 0)) %>%
+  dplyr::select(SDU_ID, targ_rs, fis_rs, priority1:priority3) %>%
+  reshape2::melt(id.vars = c("SDU_ID", "targ_rs", "fis_rs"))
+
+priority_summary_root = root_priority %>% 
+  group_by(variable) %>% 
+  summarise(perc_target = round(100*sum(value)/nrow(root_dta), 1))
+
+ggplot(data = root2) +
+  geom_histogram(aes(x = prt_crl), bins = 100) +
+  geom_vline(xintercept = 990, size = 1.5, color = "red")+
+  geom_vline(xintercept = 750, size = 1.5, color = "blue")+
+  geom_vline(xintercept = 500, size = 1.5, color = "green")+
+  annotate("text", x = 890, y = 125, label = "Threshold 3", col = "red", size = 5)+
+  annotate("text", x = 650, y = 125, label = "Threshold 2", col = "blue", size = 5)+
+  annotate("text", x = 400, y = 125, label = "Threshold 1", col = "green", size = 5)+
+  labs(y = "Frequency", x = "Priority score", title = "Smart Coasts Project") +
+  theme_bw() +
+  theme(axis.text = element_text(size = 15),
+        axis.title = element_text(size = 23),
+        plot.title = element_text(size = 23))
+  
+
+plot(root2$prt_crl)
+
+root_priority = root2 %>%
+  mutate(priority1 = if_else(prt_crl>900))
+  
+
+  
+hist(root_dta$prt_crl)
+
+
+  summarise(priority_lob_targ1 = round(100*sum(priority_lob_targ1)/nrow(root_dta)),
+         priority_lob_targ2 = 100*sum(priority_lob_targ2)/nrow(root_dta),
+         priority_lob_targ3 = 100*sum(priority_lob_targ3)/nrow(root_dta),
+         priority_rec_targ1 = 100*sum(priority_rec_targ1)/nrow(root_dta),
+         priority_rec_targ2 = 100*sum(priority_rec_targ2)/nrow(root_dta),
+         priority_rec_targ3 = 100*sum(priority_rec_targ3)/nrow(root_dta),
+         priority_lob_rec1 = 100*sum(priority_lob_rec1)/nrow(root_dta),
+         priority_lob_rec2 = 100*sum(priority_lob_rec2)/nrow(root_dta),
+         priority_lob_rec3 = 100*sum(priority_lob_rec3)/nrow(root_dta))
+
+
+##Tradeoff
+ggplot(data = root) +
+  geom_point(aes(x = log(rec_rs), y = fis_rs), size = 5) +
+  # scale_color_gradient2(name="Tourism",
+  #                       breaks = c(-5, 5),
+  #                       labels = c("Low", "High"),
+  #                       low="blue", mid = "white", high="red", midpoint = 0) +
+  #labs(x = "Lobster fisheries", y = "Reef biomass", color = "Priority") +
   theme_bw() +
   theme(axis.text = element_text(size = 15),
         axis.title = element_text(size = 23))
@@ -1031,10 +986,4 @@ p
 #        height = 6.2, 
 #        width = 10)
 
-##Tradeoff
-ggplot(data = root_mpa1) +
-  geom_point(aes(x = lob_rs, y = targ_rs, color = rec_rs), size = 5) +
-  labs(x = "Fisheries catch", y = "Conservation benefits", color = "Tourism\nPotential") +
-  theme_bw() +
-  theme(axis.text = element_text(size = 15),
-        axis.title = element_text(size = 23))
+

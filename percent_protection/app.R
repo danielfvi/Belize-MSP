@@ -15,7 +15,8 @@ library(tidyverse)
 ##Root results
 root = read_sf('data', layer = '06_prot_corl_30000ha_all') %>% st_transform(4326)
 coastline = read_sf('data', layer = 'mar_coastline') %>% st_transform(4326)
-replenishment = read_sf('data', layer = 'bz_fish_replenishment_areas') %>% st_transform(4326)
+#replenishment = read_sf('data', layer = 'bz_fish_replenishment_areas') %>% st_transform(4326)
+replenishment = read_sf('data', layer = 'exsiting_HPCZ') %>% st_transform(4326)
 reef = read_sf('data', layer = 'Reef_habitats_Belize') %>% st_transform(4326)
 
 
@@ -149,12 +150,13 @@ server <- function(input, output) {
         mutate(agreement = 
                  input$cp*cv_rs + 
                  input$rec*rec_rs + 
-                 input$lob*lob_rs + 
+                 input$lob*fis_rs + 
                  input$bio*targ_rs + 
                  input$con*connect_rs)
       
       # plot map
       if(input$checkbox == "TRUE"){
+      
       ggplot() +
         geom_sf(data = coastline) +
         geom_sf(data = reef, alpha = 0.2, color = "grey") +
